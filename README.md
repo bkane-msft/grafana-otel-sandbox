@@ -12,7 +12,7 @@ direnv allow                        # one-time, after each .envrc change
 direnv allow examples/go
 
 # Terminal 1: start the backend
-./run-lgtm.sh
+./run-lgtm.py
 
 # Terminal 2: run the Go app
 cd examples/go && ./run.sh
@@ -34,7 +34,7 @@ Then open Grafana at http://localhost:3000 to see traces, metrics, and logs.
 | Prometheus | 9090 |
 | Go app     | 8081 |
 
-`run-lgtm.sh` pulls `docker.io/grafana/otel-lgtm:latest` and creates
+`run-lgtm.py` pulls `docker.io/grafana/otel-lgtm:latest` and creates
 `./container/{grafana,prometheus,loki}` for persistent data on first run.
 
 ## Environment
@@ -55,7 +55,7 @@ nested `examples/go/.envrc` needs its own `direnv allow examples/go`.
 ## Dashboards
 
 Dashboards are version-controlled via Grafana's file-based provisioning. On
-startup `run-lgtm.sh` mounts:
+startup `run-lgtm.py` mounts:
 
 - `grafana/provisioning/` → `/etc/grafana/provisioning` (provider config)
 - `grafana/dashboards/` → `/var/lib/grafana/dashboards` (the JSON files)
@@ -87,7 +87,7 @@ Extra prereq beyond [Environment](#environment): [`uv`](https://docs.astral.sh/u
 Setup:
 
 ```bash
-./run-lgtm.sh                       # start Grafana
+./run-lgtm.py                       # start Grafana
 ./bootstrap-mcp.py                  # create a service account + token, write to .env
 ```
 
