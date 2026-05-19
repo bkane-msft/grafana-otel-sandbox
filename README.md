@@ -78,38 +78,45 @@ override. `GRAFANA_URL` and `OUT_DIR` are also env-configurable.
 Commit `grafana/` to keep dashboards in git; `container/grafana/` stays the
 runtime data dir and is gitignored.
 
-# Claude Code via mcp-grafana
+# Claude Code / VS Code via mcp-grafana
 
-[mcp-grafana](https://github.com/grafana/mcp-grafana) exposes Grafana's API to
-Claude Code as an MCP server. It runs as an on-demand stdio subprocess — no
-extra container, no daemon.
+[mcp-grafana](https://github.com/grafana/mcp-grafana) exposes Grafana's API as
+an MCP server. It runs as an on-demand stdio subprocess.
 
-Extra prereq beyond [Environment](#environment): [`uv`](https://docs.astral.sh/uv/)
-(for `uvx`, which launches mcp-grafana).
+Requires: [`uv`](https://docs.astral.sh/uv/) (for `uvx`, which launches mcp-grafana).
 
-Setup:
+Setup (one-time):
 
 ```bash
 ./run-lgtm.py                       # start Grafana
 ./bootstrap-mcp.py                  # create a service account + token, write to .env
 ```
 
-After that, launching `claude` from this directory picks up `.mcp.json`, which
-references `${GRAFANA_SERVICE_ACCOUNT_TOKEN}` (and `${GRAFANA_URL}`) from your
-shell env, loaded by direnv.
+Both clients pick up `GRAFANA_URL` and `GRAFANA_SERVICE_ACCOUNT_TOKEN` from
+the shell env (loaded by direnv). Two config files live in the repo, one per
+client — the formats differ enough that they can't share a file:
 
-On first launch Claude Code treats project-scoped `.mcp.json` as untrusted —
-run `/mcp` inside Claude Code and approve the `grafana` server. The
-`mcp__grafana__*` tools become available immediately after approval. If the
-server isn't even listed, direnv likely hadn't loaded the token when you
-launched `claude`; exit, `direnv reload`, and re-launch.
+- **Claude Code** — `.mcp.json` (top-level `mcpServers`, `${VAR}` substitution).
+  Launch `claude` from this directory. On first launch Claude treats
+  project-scoped `.mcp.json` as untrusted — run `/mcp` and approve the
+  `grafana` server. `mcp__grafana__*` tools become available immediately
+  after approval.
+- **VS Code** — `.vscode/mcp.json` (top-level `servers`, `${env:VAR}`
+  substitution, requires VS Code 1.102+ with GitHub Copilot / Agent Mode).
+  Launch `code .` from this directory so direnv's env is inherited. Open the
+  Chat view, switch to **Agent** mode, and the `grafana` server appears in the
+  tool picker; click to start it. Manage it any time via the **MCP: List
+  Servers** command.
+
+If the server isn't listed in either client, direnv likely hadn't loaded the
+token when you launched the editor — exit, `direnv reload`, and re-launch.
 
 `bootstrap-mcp.py` is idempotent — re-run it any time. It reuses the existing
 `mcp-grafana-sandbox` service account (Editor role) and provisions a fresh
 token. Override defaults with `GRAFANA_URL`, `GRAFANA_ADMIN_USER`,
 `GRAFANA_ADMIN_PASSWORD`.
 
-To verify the server works end-to-end without involving Claude Code:
+To verify the server works end-to-end:
 
 ```bash
 ./test-mcp.py
@@ -130,4 +137,3 @@ list.
 
 - Make Ctrl-C work
 - Make scripts use flags instead of env vars (with ability to set from env var)
-- Add VS code settings
