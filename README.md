@@ -54,3 +54,54 @@ override. `GRAFANA_URL` and `OUT_DIR` are also env-configurable.
 
 Commit `grafana/` to keep dashboards in git; `container/grafana/` stays the
 runtime data dir and is gitignored.
+
+## Claude Code via mcp-grafana
+
+[mcp-grafana](https://github.com/grafana/mcp-grafana) exposes Grafana's API to
+Claude Code as an MCP server. It runs as an on-demand stdio subprocess — no
+extra container, no daemon.
+
+Prereqs (one-time):
+
+- [`uv`](https://docs.astral.sh/uv/) (provides `uvx`, which launches mcp-grafana)
+- [`direnv`](https://direnv.net/) (auto-loads `.env` into your shell when you `cd` here)
+
+Setup:
+
+```bash
+./run-lgtm.sh                       # start Grafana
+./bootstrap-mcp.py                  # create a service account + token, write to .env
+direnv allow                        # one-time, so direnv loads .env
+```
+
+After that, launching `claude` from this directory picks up `.mcp.json`, which
+references `${GRAFANA_SERVICE_ACCOUNT_TOKEN}` from your shell env (loaded by
+direnv from `.env`).
+
+On first launch Claude Code treats project-scoped `.mcp.json` as untrusted —
+run `/mcp` inside Claude Code and approve the `grafana` server. The
+`mcp__grafana__*` tools become available immediately after approval. If the
+server isn't even listed, direnv likely hadn't loaded the token when you
+launched `claude`; exit, `direnv reload`, and re-launch.
+
+`bootstrap-mcp.py` is idempotent — re-run it any time. It reuses the existing
+`mcp-grafana-sandbox` service account (Editor role) and provisions a fresh
+token. Override defaults with `GRAFANA_URL`, `GRAFANA_ADMIN_USER`,
+`GRAFANA_ADMIN_PASSWORD`.
+
+To verify the server works end-to-end without involving Claude Code:
+
+```bash
+./test-mcp.py
+```
+
+It spawns `uvx mcp-grafana` the same way Claude Code would, drives an MCP
+handshake (`initialize` → `tools/list` → `search_dashboards`), and reports
+PASS/FAIL. Useful for sanity-checking after `bootstrap-mcp.py` or after
+changes to `.mcp.json`. Loads `.env` directly, so it works with or without
+direnv.
+
+To enable optional tool categories (e.g. `runpanelquery`, `examples`,
+`clickhouse`), add `--enabled-tools` args in `.mcp.json` — see the
+[mcp-grafana README](https://github.com/grafana/mcp-grafana#tools) for the full
+list.
