@@ -3,7 +3,7 @@
 Pared-down copy of https://github.com/grafana/docker-otel-lgtm — just enough
 to run the Grafana LGTM backend in Docker and point a Go app at it.
 
-## Quick start
+# Quick start
 
 Requires [direnv](https://direnv.net/) — see [Environment](#environment) below.
 
@@ -19,11 +19,14 @@ cd examples/go && ./run.sh
 
 # Terminal 3: hit it
 curl localhost:8081/rolldice
+
+# kill server (if Ctrl-C hangs)
+docker kill lgtm
 ```
 
 Then open Grafana at http://localhost:3000 to see traces, metrics, and logs.
 
-## Ports
+# Ports
 
 | Service    | Port |
 |------------|------|
@@ -37,7 +40,7 @@ Then open Grafana at http://localhost:3000 to see traces, metrics, and logs.
 `run-lgtm.py` pulls `docker.io/grafana/otel-lgtm:latest` and creates
 `./container/{grafana,prometheus,loki}` for persistent data on first run.
 
-## Environment
+# Environment
 
 Env config splits across two files, loaded by direnv:
 
@@ -52,7 +55,7 @@ Env config splits across two files, loaded by direnv:
 Run `direnv allow` after cloning, and again whenever an `.envrc` changes. The
 nested `examples/go/.envrc` needs its own `direnv allow examples/go`.
 
-## Dashboards
+# Dashboards
 
 Dashboards are version-controlled via Grafana's file-based provisioning. On
 startup `run-lgtm.py` mounts:
@@ -75,7 +78,7 @@ override. `GRAFANA_URL` and `OUT_DIR` are also env-configurable.
 Commit `grafana/` to keep dashboards in git; `container/grafana/` stays the
 runtime data dir and is gitignored.
 
-## Claude Code via mcp-grafana
+# Claude Code via mcp-grafana
 
 [mcp-grafana](https://github.com/grafana/mcp-grafana) exposes Grafana's API to
 Claude Code as an MCP server. It runs as an on-demand stdio subprocess — no
@@ -122,3 +125,9 @@ To enable optional tool categories (e.g. `runpanelquery`, `examples`,
 `clickhouse`), add `--enabled-tools` args in `.mcp.json` — see the
 [mcp-grafana README](https://github.com/grafana/mcp-grafana#tools) for the full
 list.
+
+# TODO
+
+- Make Ctrl-C work
+- Make scripts use flags instead of env vars (with ability to set from env var)
+- Add VS code settings
