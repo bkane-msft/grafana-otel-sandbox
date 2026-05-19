@@ -1,0 +1,14 @@
+.idea/
+venv/
+.venv
+/container/grafana/*
+/container/loki/*
+/container/prometheus/*
+.lycheecache
+*.iml
+.env
+opentelemetry-javaagent*.jar
+grafana-opentelemetry*.jar
+build/
+obj/
+examples/go/dice
