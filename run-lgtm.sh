@@ -13,10 +13,10 @@ done
 
 test -f .env || touch .env
 
-# Check if OBI is enabled (from environment or .env file)
+# ENABLE_OBI comes from .env via direnv (or your shell directly).
 OBI_FLAGS=()
 OBI_ENV_FLAGS=()
-if [[ ${ENABLE_OBI:-} == "true" ]] || grep -qE '^ENABLE_OBI=true$' .env 2>/dev/null; then
+if [[ ${ENABLE_OBI:-} == "true" ]]; then
 	echo "OBI eBPF auto-instrumentation enabled. Adding --pid=host --privileged flags."
 	OBI_FLAGS=(--pid=host --privileged)
 	# Forward OBI-specific env vars into the container (they are not in .env by default).

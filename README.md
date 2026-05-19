@@ -5,7 +5,12 @@ to run the Grafana LGTM backend in Docker and point a Go app at it.
 
 ## Quick start
 
+Requires [direnv](https://direnv.net/) — see [Environment](#environment) below.
+
 ```bash
+direnv allow                        # one-time, after each .envrc change
+direnv allow examples/go
+
 # Terminal 1: start the backend
 ./run-lgtm.sh
 
@@ -31,6 +36,21 @@ Then open Grafana at http://localhost:3000 to see traces, metrics, and logs.
 
 `run-lgtm.sh` pulls `docker.io/grafana/otel-lgtm:latest` and creates
 `./container/{grafana,prometheus,loki}` for persistent data on first run.
+
+## Environment
+
+Env config splits across two files, loaded by direnv:
+
+- **`.envrc`** (committed) — non-secret defaults: `GRAFANA_URL`,
+  `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`. The Go example has its own
+  `examples/go/.envrc` with OTEL config (`OTEL_RESOURCE_ATTRIBUTES`,
+  `OTEL_EXPORTER_OTLP_INSECURE`, `OTEL_METRIC_EXPORT_INTERVAL`).
+- **`.env`** (gitignored) — secrets; currently just
+  `GRAFANA_SERVICE_ACCOUNT_TOKEN`. Loaded last by `.envrc`, so values here
+  override the committed defaults.
+
+Run `direnv allow` after cloning, and again whenever an `.envrc` changes. The
+nested `examples/go/.envrc` needs its own `direnv allow examples/go`.
 
 ## Dashboards
 
@@ -61,22 +81,19 @@ runtime data dir and is gitignored.
 Claude Code as an MCP server. It runs as an on-demand stdio subprocess — no
 extra container, no daemon.
 
-Prereqs (one-time):
-
-- [`uv`](https://docs.astral.sh/uv/) (provides `uvx`, which launches mcp-grafana)
-- [`direnv`](https://direnv.net/) (auto-loads `.env` into your shell when you `cd` here)
+Extra prereq beyond [Environment](#environment): [`uv`](https://docs.astral.sh/uv/)
+(for `uvx`, which launches mcp-grafana).
 
 Setup:
 
 ```bash
 ./run-lgtm.sh                       # start Grafana
 ./bootstrap-mcp.py                  # create a service account + token, write to .env
-direnv allow                        # one-time, so direnv loads .env
 ```
 
 After that, launching `claude` from this directory picks up `.mcp.json`, which
-references `${GRAFANA_SERVICE_ACCOUNT_TOKEN}` from your shell env (loaded by
-direnv from `.env`).
+references `${GRAFANA_SERVICE_ACCOUNT_TOKEN}` (and `${GRAFANA_URL}`) from your
+shell env, loaded by direnv.
 
 On first launch Claude Code treats project-scoped `.mcp.json` as untrusted —
 run `/mcp` inside Claude Code and approve the `grafana` server. The
