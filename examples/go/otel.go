@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -25,80 +24,57 @@ var (
 	meter  = otel.Meter(schemaName)
 )
 
-// setupOTelSDK bootstraps the OpenTelemetry pipeline.
-// If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
-	var shutdownFuncs []func(context.Context) error
-
-	// shutdown calls cleanup functions registered via shutdownFuncs.
-	// The errors from the calls are joined.
-	// Each registered cleanup will be invoked once.
-	shutdown = func(ctx context.Context) error {
-		var errs error
-		for _, fn := range shutdownFuncs {
-			errs = errors.Join(errs, fn(ctx))
-		}
-		shutdownFuncs = nil
-		return errs
-	}
-
-	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
-	handleErr := func(inErr error) {
-		err = errors.Join(inErr, shutdown(ctx))
-	}
-
-	// Propagators are selected via the OTEL_PROPAGATORS env var
-	// (defaults to tracecontext,baggage).
-	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
-
-	// Trace exporter is selected via OTEL_TRACES_EXPORTER (defaults to otlp).
-	traceExporter, err := autoexport.NewSpanExporter(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(traceExporter))
-	if err != nil {
-		handleErr(err)
-		return
-	}
-	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
-	otel.SetTracerProvider(tracerProvider)
-
-	// Metric reader is selected via OTEL_METRICS_EXPORTER (defaults to otlp).
-	// For otlp it wraps a PeriodicReader honoring OTEL_METRIC_EXPORT_INTERVAL.
-	metricReader, err := autoexport.NewMetricReader(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	meterProvider :=
-		metric.NewMeterProvider(metric.WithReader(metricReader))
-	if err != nil {
-		handleErr(err)
-		return
-	}
-	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
-	otel.SetMeterProvider(meterProvider)
-
-	// Log exporter is selected via OTEL_LOGS_EXPORTER (defaults to otlp).
+// setupLogs configures the OpenTelemetry log pipeline and registers the global
+// LoggerProvider. The log exporter is selected via OTEL_LOGS_EXPORTER
+// (defaults to otlp). The returned function shuts the provider down.
+func setupLogs(ctx context.Context) (func(context.Context) error, error) {
 	logExporter, err := autoexport.NewLogExporter(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	loggerProvider := log.NewLoggerProvider(log.WithProcessor(log.NewBatchProcessor(logExporter)))
-	if err != nil {
-		handleErr(err)
-		return
-	}
-	shutdownFuncs = append(shutdownFuncs, loggerProvider.Shutdown)
 	global.SetLoggerProvider(loggerProvider)
 
-	err = runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
+	return loggerProvider.Shutdown, nil
+}
+
+// setupMetrics configures the OpenTelemetry metric pipeline, registers the
+// global MeterProvider, and starts Go runtime instrumentation. The metric
+// reader is selected via OTEL_METRICS_EXPORTER (defaults to otlp); for otlp it
+// wraps a PeriodicReader honoring OTEL_METRIC_EXPORT_INTERVAL. The returned
+// function shuts the provider down.
+func setupMetrics(ctx context.Context) (func(context.Context) error, error) {
+	metricReader, err := autoexport.NewMetricReader(ctx)
 	if err != nil {
+		return nil, err
+	}
+
+	meterProvider := metric.NewMeterProvider(metric.WithReader(metricReader))
+	otel.SetMeterProvider(meterProvider)
+
+	if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second)); err != nil {
 		logger.ErrorContext(ctx, "otel runtime instrumentation failed:", slog.Any("error", err))
 	}
 
-	return
+	return meterProvider.Shutdown, nil
+}
+
+// setupTraces configures the OpenTelemetry trace pipeline, sets the text map
+// propagator, and registers the global TracerProvider. Propagators are selected
+// via OTEL_PROPAGATORS (defaults to tracecontext,baggage) and the span exporter
+// via OTEL_TRACES_EXPORTER (defaults to otlp). The returned function shuts the
+// provider down.
+func setupTraces(ctx context.Context) (func(context.Context) error, error) {
+	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
+
+	traceExporter, err := autoexport.NewSpanExporter(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(traceExporter))
+	otel.SetTracerProvider(tracerProvider)
+
+	return tracerProvider.Shutdown, nil
 }

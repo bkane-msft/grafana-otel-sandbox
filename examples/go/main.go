@@ -24,14 +24,30 @@ func run() (err error) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	// Set up OpenTelemetry.
-	otelShutdown, err := setupOTelSDK(ctx)
+	// Set up OpenTelemetry: logs, then metrics, then traces.
+	// Each returns a shutdown function; defer them so nothing leaks.
+	shutdownLogs, err := setupLogs(ctx)
 	if err != nil {
 		return
 	}
-	// Handle shutdown properly so nothing leaks.
 	defer func() {
-		err = errors.Join(err, otelShutdown(context.Background()))
+		err = errors.Join(err, shutdownLogs(context.Background()))
+	}()
+
+	shutdownMetrics, err := setupMetrics(ctx)
+	if err != nil {
+		return
+	}
+	defer func() {
+		err = errors.Join(err, shutdownMetrics(context.Background()))
+	}()
+
+	shutdownTraces, err := setupTraces(ctx)
+	if err != nil {
+		return
+	}
+	defer func() {
+		err = errors.Join(err, shutdownTraces(context.Background()))
 	}()
 
 	// Start HTTP server.
