@@ -17,8 +17,11 @@ direnv allow examples/go
 # Terminal 2: run the Go app
 cd examples/go && ./run.sh
 
+# Alternative, emit everything to stdout
+OTEL_TRACES_EXPORTER=console OTEL_METRICS_EXPORTER=console OTEL_LOGS_EXPORTER=console ./run.sh
+
 # Terminal 3: hit it
-curl localhost:8081/rolldice
+while true; do curl localhost:8081/rolldice; done
 
 # kill server (if Ctrl-C hangs)
 docker kill lgtm
@@ -135,5 +138,5 @@ list.
 
 # TODO
 
-- Make Ctrl-C work
 - Make scripts use flags instead of env vars (with ability to set from env var)
+- tweak the code to start up how I like it (optionally emit to stdout etc.)

@@ -7,14 +7,11 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
+	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/log/global"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -50,13 +47,12 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		err = errors.Join(inErr, shutdown(ctx))
 	}
 
-	prop := propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	)
-	otel.SetTextMapPropagator(prop)
+	// Propagators are selected via the OTEL_PROPAGATORS env var
+	// (defaults to tracecontext,baggage).
+	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
 
-	traceExporter, err := otlptrace.New(ctx, otlptracehttp.NewClient())
+	// Trace exporter is selected via OTEL_TRACES_EXPORTER (defaults to otlp).
+	traceExporter, err := autoexport.NewSpanExporter(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -69,13 +65,15 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
 	otel.SetTracerProvider(tracerProvider)
 
-	metricExporter, err := otlpmetrichttp.New(ctx)
+	// Metric reader is selected via OTEL_METRICS_EXPORTER (defaults to otlp).
+	// For otlp it wraps a PeriodicReader honoring OTEL_METRIC_EXPORT_INTERVAL.
+	metricReader, err := autoexport.NewMetricReader(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	meterProvider :=
-		metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(metricExporter)))
+		metric.NewMeterProvider(metric.WithReader(metricReader))
 	if err != nil {
 		handleErr(err)
 		return
@@ -83,7 +81,8 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
 	otel.SetMeterProvider(meterProvider)
 
-	logExporter, err := otlploghttp.New(ctx, otlploghttp.WithInsecure())
+	// Log exporter is selected via OTEL_LOGS_EXPORTER (defaults to otlp).
+	logExporter, err := autoexport.NewLogExporter(ctx)
 	if err != nil {
 		return nil, err
 	}
