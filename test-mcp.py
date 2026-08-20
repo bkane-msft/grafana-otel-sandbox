@@ -50,7 +50,7 @@ def notification(method: str) -> str:
 def run() -> int:
     load_dotenv()
     if not os.environ.get("GRAFANA_SERVICE_ACCOUNT_TOKEN"):
-        print("GRAFANA_SERVICE_ACCOUNT_TOKEN not set. Run ./bootstrap-mcp.py first.", file=sys.stderr)
+        print("GRAFANA_SERVICE_ACCOUNT_TOKEN not set. Run ./create-grafana-token.py first.", file=sys.stderr)
         return 1
     os.environ.setdefault("GRAFANA_URL", "http://localhost:3000")
 
