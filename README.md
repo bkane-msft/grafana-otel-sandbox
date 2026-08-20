@@ -139,3 +139,5 @@ list.
 # TODO
 
 - Make scripts use flags instead of env vars (with ability to set from env var)
+- make an actually nice dashboard with good metrics
+- add Rust example
