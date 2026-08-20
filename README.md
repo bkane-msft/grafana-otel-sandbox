@@ -139,4 +139,3 @@ list.
 # TODO
 
 - Make scripts use flags instead of env vars (with ability to set from env var)
-- tweak the code to start up how I like it (optionally emit to stdout etc.)

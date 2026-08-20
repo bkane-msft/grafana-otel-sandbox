@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"log/slog"
+	"os"
+	"strings"
 	"time"
 
+	"github.com/lmittmann/tint"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
+	"go.opentelemetry.io/contrib/processors/minsev"
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/log/global"
@@ -20,21 +24,51 @@ const schemaName = "https://github.com/grafana/docker-otel-lgtm"
 
 var (
 	tracer = otel.Tracer(schemaName)
-	logger = otelslog.NewLogger(schemaName)
 	meter  = otel.Meter(schemaName)
 )
 
-// setupLogs configures the OpenTelemetry log pipeline and registers the global
-// LoggerProvider. The log exporter is selected via OTEL_LOGS_EXPORTER
-// (defaults to otlp). The returned function shuts the provider down.
+// setupLogs configures the slog default logger and, unless using the local
+// slogtint handler, the OpenTelemetry log pipeline. The destination is selected
+// via OTEL_LOGS_EXPORTER:
+//   - slogtint: colorized human-readable logs to stderr (no export, no-op shutdown)
+//   - otlp/console/etc: slog records flow through the otelslog bridge to the
+//     exporter chosen by autoexport (defaults to otlp)
+//
+// In all cases the verbosity is controlled by LOG_LEVEL (defaults to info).
 func setupLogs(ctx context.Context) (func(context.Context) error, error) {
+	// Local dev: pretty, colorized logs to stderr. Nothing is buffered or
+	// exported, so shutdown has nothing to do.
+	if os.Getenv("OTEL_LOGS_EXPORTER") == "slogtint" {
+		level := map[string]slog.Level{
+			"DEBUG": slog.LevelDebug,
+			"INFO":  slog.LevelInfo,
+			"WARN":  slog.LevelWarn,
+			"ERROR": slog.LevelError,
+			"":      slog.LevelInfo,
+		}[strings.ToUpper(os.Getenv("LOG_LEVEL"))]
+
+		slog.SetDefault(slog.New(tint.NewTextHandler(os.Stderr, &tint.Options{
+			Level: level,
+		})))
+		return func(context.Context) error { return nil }, nil
+	}
+
 	logExporter, err := autoexport.NewLogExporter(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	loggerProvider := log.NewLoggerProvider(log.WithProcessor(log.NewBatchProcessor(logExporter)))
+	// minsev drops records below LOG_LEVEL and short-circuits the otelslog
+	// bridge's Enabled check. Empty or unknown values fall back to INFO.
+	var sev minsev.Severity
+	_ = sev.UnmarshalText([]byte(os.Getenv("LOG_LEVEL")))
+
+	loggerProvider := log.NewLoggerProvider(
+		log.WithProcessor(minsev.NewLogProcessor(log.NewBatchProcessor(logExporter), sev)),
+	)
 	global.SetLoggerProvider(loggerProvider)
+
+	slog.SetDefault(slog.New(otelslog.NewHandler(schemaName, otelslog.WithLoggerProvider(loggerProvider))))
 
 	return loggerProvider.Shutdown, nil
 }
@@ -54,7 +88,7 @@ func setupMetrics(ctx context.Context) (func(context.Context) error, error) {
 	otel.SetMeterProvider(meterProvider)
 
 	if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second)); err != nil {
-		logger.ErrorContext(ctx, "otel runtime instrumentation failed:", slog.Any("error", err))
+		slog.ErrorContext(ctx, "otel runtime instrumentation failed:", slog.Any("error", err))
 	}
 
 	return meterProvider.Shutdown, nil

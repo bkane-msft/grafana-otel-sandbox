@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"log/slog"
 	"math/rand"
@@ -19,18 +18,17 @@ func rolldice(w http.ResponseWriter, r *http.Request) {
 
 	roll := 1 + roll()
 
-	msg := fmt.Sprintf("Rolled a dice: %d\n", roll)
-	logger.InfoContext(ctx, msg, slog.Int("result", roll))
+	slog.InfoContext(ctx, "Rolled a dice", slog.Int("result", roll))
 
 	resp := strconv.Itoa(roll) + "\n"
 	if _, err := io.WriteString(w, resp); err != nil {
-		logger.ErrorContext(ctx, "Write failed: %v\n", slog.Any("error", err))
+		slog.ErrorContext(ctx, "Write failed", slog.Any("error", err))
 	}
 
 	h, err := meter.Int64Histogram("dice.roll", metric.WithDescription("The result of the dice roll"))
 	success := (err == nil)
 	if !success {
-		logger.ErrorContext(ctx, "Histogram instantiation failed: %v\n", slog.Any("error", err))
+		slog.ErrorContext(ctx, "Histogram instantiation failed", slog.Any("error", err))
 	}
 	h.Record(ctx, int64(roll), metric.WithAttributes(attribute.Bool("result.success", success)))
 }

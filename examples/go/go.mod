@@ -3,9 +3,11 @@ module dice
 go 1.25.0
 
 require (
+	github.com/lmittmann/tint v1.2.0
 	go.opentelemetry.io/contrib/exporters/autoexport v0.70.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.70.0
+	go.opentelemetry.io/contrib/processors/minsev v0.16.2
 	go.opentelemetry.io/contrib/propagators/autoprop v0.70.0
 	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/log v0.21.0
