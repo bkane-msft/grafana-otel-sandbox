@@ -72,5 +72,6 @@ Dashboards are saved into `./grafana/dashboards/`.
 # TODO
 
 - Make scripts use flags instead of env vars (with ability to set from env var)
-- make an actually nice dashboard with good metrics
+- exporting dashboards work but I don't ben dashboard in the menu?
 - add Rust example
+
