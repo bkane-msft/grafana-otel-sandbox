@@ -78,7 +78,11 @@ def main() -> None:
         *mount(mount_opts, LOCAL_VOLUME / "grafana", "/data/grafana"),
         *mount(mount_opts, LOCAL_VOLUME / "prometheus", "/data/prometheus"),
         *mount(mount_opts, LOCAL_VOLUME / "loki", "/data/loki"),
-        *mount(mount_opts, REPO / "grafana" / "provisioning", "/etc/grafana/provisioning"),
+        # This image reads provisioning from conf/provisioning (not /etc/grafana).
+        # Add our dashboards provider alongside the built-in providers instead of
+        # masking the whole dir (which also holds the LGTM datasources).
+        *mount(mount_opts, REPO / "grafana" / "provisioning" / "dashboards" / "dashboards.yaml",
+               "/otel-lgtm/grafana/conf/provisioning/dashboards/repo.yaml"),
         *mount(mount_opts, REPO / "grafana" / "dashboards", "/var/lib/grafana/dashboards"),
         "-e", "GF_PATHS_DATA=/data/grafana",
         "--env-file", str(ENV_FILE),
