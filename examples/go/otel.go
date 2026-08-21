@@ -15,16 +15,15 @@ import (
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/log/global"
-	"go.opentelemetry.io/otel/sdk/log"
-	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/trace"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 const schemaName = "https://github.com/grafana/docker-otel-lgtm"
 
 var (
 	tracer = otel.Tracer(schemaName)
-	meter  = otel.Meter(schemaName)
 )
 
 // setupLogs configures the slog default logger and, unless using the local
@@ -63,8 +62,8 @@ func setupLogs(ctx context.Context) (func(context.Context) error, error) {
 	var sev minsev.Severity
 	_ = sev.UnmarshalText([]byte(os.Getenv("LOG_LEVEL")))
 
-	loggerProvider := log.NewLoggerProvider(
-		log.WithProcessor(minsev.NewLogProcessor(log.NewBatchProcessor(logExporter), sev)),
+	loggerProvider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(minsev.NewLogProcessor(sdklog.NewBatchProcessor(logExporter), sev)),
 	)
 	global.SetLoggerProvider(loggerProvider)
 
@@ -84,11 +83,17 @@ func setupMetrics(ctx context.Context) (func(context.Context) error, error) {
 		return nil, err
 	}
 
-	meterProvider := metric.NewMeterProvider(metric.WithReader(metricReader))
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader))
 	otel.SetMeterProvider(meterProvider)
 
+	// collect runtime metrics @ 1s instead of the default 15s for demo purposes
 	if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second)); err != nil {
 		slog.ErrorContext(ctx, "otel runtime instrumentation failed:", slog.Any("error", err))
+	}
+
+	meter := otel.Meter(schemaName)
+	if err := setupRollDiceMetrics(meter); err != nil {
+		return meterProvider.Shutdown, err
 	}
 
 	return meterProvider.Shutdown, nil
@@ -107,7 +112,7 @@ func setupTraces(ctx context.Context) (func(context.Context) error, error) {
 		return nil, err
 	}
 
-	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(traceExporter))
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithBatcher(traceExporter))
 	otel.SetTracerProvider(tracerProvider)
 
 	return tracerProvider.Shutdown, nil
