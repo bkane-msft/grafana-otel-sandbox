@@ -15,14 +15,31 @@ use axum::{
     routing::get,
 };
 use opentelemetry::{
-    KeyValue,
+    KeyValue, global,
     metrics::{Counter, Histogram, Meter},
+    propagation::Extractor,
+    trace::TraceContextExt as _,
 };
 use rand::RngExt as _;
 use tower_http::trace::TraceLayer;
 use tracing::{Span, field};
+use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 pub type Roller = dyn Fn() -> Result<u64> + Send + Sync;
+
+/// Adapts axum's `HeaderMap` to OpenTelemetry's `Extractor` so the configured
+/// propagator can read trace context from inbound request headers.
+struct HeaderExtractor<'a>(&'a axum::http::HeaderMap);
+
+impl Extractor for HeaderExtractor<'_> {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.0.get(key).and_then(|value| value.to_str().ok())
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        self.0.keys().map(axum::http::HeaderName::as_str).collect()
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -77,7 +94,7 @@ pub fn router(state: AppState) -> Router {
                         .get::<MatchedPath>()
                         .map_or_else(|| request.uri().path(), MatchedPath::as_str);
 
-                    tracing::info_span!(
+                    let span = tracing::info_span!(
                         "http.request",
                         otel.name = %format_args!("{} {route}", request.method()),
                         otel.kind = "server",
@@ -85,7 +102,19 @@ pub fn router(state: AppState) -> Router {
                         http.route = route,
                         http.response.status_code = field::Empty,
                         otel.status_code = field::Empty,
-                    )
+                    );
+
+                    // Continue an upstream trace when the request carries
+                    // propagated context (per OTEL_PROPAGATORS). With no valid
+                    // upstream context the span stays a root, unchanged.
+                    let parent = global::get_text_map_propagator(|propagator| {
+                        propagator.extract(&HeaderExtractor(request.headers()))
+                    });
+                    if parent.has_active_span() {
+                        let _ = span.set_parent(parent);
+                    }
+
+                    span
                 })
                 .on_response(
                     |response: &Response<Body>, latency: Duration, span: &Span| {
@@ -198,8 +227,13 @@ mod tests {
         http::{Request, StatusCode},
     };
     use http_body_util::BodyExt as _;
-    use opentelemetry::{KeyValue, metrics::MeterProvider as _, trace::Status};
+    use opentelemetry::{
+        KeyValue, global,
+        metrics::MeterProvider as _,
+        trace::{Status, TraceId},
+    };
     use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData, ResourceMetrics};
+    use opentelemetry_sdk::propagation::TraceContextPropagator;
     use tower::ServiceExt as _;
     use tracing::instrument::WithSubscriber as _;
 
@@ -308,6 +342,50 @@ mod tests {
 
         // The HTTP metric is recorded regardless of the handler outcome.
         assert_http_duration_recorded(&metrics, 500);
+    }
+
+    #[tokio::test]
+    async fn continues_upstream_trace_from_traceparent_header() {
+        // The extraction path reads the process-global propagator, so install
+        // the W3C tracecontext propagator for this test. Other tests send no
+        // traceparent header, so their spans stay roots regardless.
+        global::set_text_map_propagator(TraceContextPropagator::new());
+
+        let telemetry = TestTelemetry::new();
+        let meter = telemetry.meter_provider.meter(INSTRUMENTATION_SCOPE);
+        let app = router(AppState::new(Arc::new(|| Ok(4)), &meter));
+
+        let trace_hex = "0af7651916cd43dd8448eb211c80319c";
+        let parent_span_hex = "b7ad6b7169203331";
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/rolldice")
+                    .header(
+                        "traceparent",
+                        format!("00-{trace_hex}-{parent_span_hex}-01"),
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .with_subscriber(telemetry.dispatch.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        telemetry.flush();
+        let expected_trace = TraceId::from_hex(trace_hex).unwrap();
+        let spans = telemetry.spans();
+
+        // The handler span inherits the upstream trace id, which can only happen
+        // if the traceparent header was extracted and installed as the parent
+        // context. Without propagation the span would start a fresh root trace.
+        let roll_span = spans
+            .iter()
+            .find(|span| span.name == "roll")
+            .expect("no roll span recorded");
+        assert_eq!(roll_span.span_context.trace_id(), expected_trace);
     }
 
     fn assert_http_duration_recorded(metrics: &[ResourceMetrics], status: i64) {

@@ -1,9 +1,16 @@
 use anyhow::{Result, anyhow};
-use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::{
+    propagation::{TextMapCompositePropagator, TextMapPropagator},
+    trace::TracerProvider as _,
+};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{LogExporter, MetricExporter, SpanExporter};
 use opentelemetry_sdk::{
-    Resource, logs::SdkLoggerProvider, metrics::SdkMeterProvider, trace::SdkTracerProvider,
+    Resource,
+    logs::SdkLoggerProvider,
+    metrics::SdkMeterProvider,
+    propagation::{BaggagePropagator, TraceContextPropagator},
+    trace::SdkTracerProvider,
 };
 use tracing_subscriber::{
     Layer as _, Registry,
@@ -44,6 +51,58 @@ impl ExporterKind {
             )),
         }
     }
+}
+
+/// Builds the text-map propagator from `OTEL_PROPAGATORS` (default
+/// `tracecontext,baggage`), mirroring Go's `autoprop.NewTextMapPropagator`.
+/// Returns `None` for `none` (no propagation), so the caller leaves the global
+/// no-op propagator untouched. The propagator is returned rather than installed
+/// so the global side effect lives at the composition root (`main`), keeping
+/// library and test code free of process-wide state.
+pub fn propagator_from_env() -> Result<Option<TextMapCompositePropagator>> {
+    build_propagator(&std::env::var("OTEL_PROPAGATORS").unwrap_or_default())
+}
+
+/// Builds the composite propagator named by `value` (comma-separated, e.g.
+/// `"tracecontext,baggage"`). Empty defaults to `tracecontext,baggage`. `none`
+/// yields `None`, meaning "leave the global no-op propagator in place". Only the
+/// W3C `tracecontext` and `baggage` propagators are supported; any other entry
+/// is rejected.
+fn build_propagator(value: &str) -> Result<Option<TextMapCompositePropagator>> {
+    let value = value.trim();
+    let names = if value.is_empty() {
+        "tracecontext,baggage"
+    } else {
+        value
+    };
+
+    let entries = names
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .collect::<Vec<_>>();
+
+    if entries
+        .iter()
+        .any(|entry| entry.eq_ignore_ascii_case("none"))
+    {
+        return Ok(None);
+    }
+
+    let mut propagators: Vec<Box<dyn TextMapPropagator + Send + Sync>> = Vec::new();
+    for entry in entries {
+        match entry.to_ascii_lowercase().as_str() {
+            "tracecontext" => propagators.push(Box::new(TraceContextPropagator::new())),
+            "baggage" => propagators.push(Box::new(BaggagePropagator::new())),
+            other => {
+                return Err(anyhow!(
+                    "unsupported OTEL_PROPAGATORS entry {other:?}; expected tracecontext, baggage, or none"
+                ));
+            }
+        }
+    }
+
+    Ok(Some(TextMapCompositePropagator::new(propagators)))
 }
 
 impl Telemetry {
@@ -110,6 +169,12 @@ impl Telemetry {
                     .with_filter(exporter_filter.clone()),
             )
             .with(OpenTelemetryTracingBridge::new(&logger_provider).with_filter(exporter_filter));
+        // The one telemetry global installed here rather than in `main`:
+        // registering the default subscriber is the unavoidable "make logging
+        // work at all" step (analogous to Go's slog.SetDefault), and returning
+        // the composed subscriber just to install it in `main` adds type noise
+        // for no real decoupling. All other globals (the propagator) live in
+        // `main`; tests use TestTelemetry's scoped Dispatch and install neither.
         subscriber.try_init()?;
 
         Ok(Self {
@@ -240,5 +305,42 @@ impl Drop for TestTelemetry {
         let _ = self.tracer_provider.shutdown();
         let _ = self.meter_provider.shutdown();
         let _ = self.logger_provider.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_propagator;
+
+    #[test]
+    fn empty_defaults_to_w3c_composite() {
+        assert!(build_propagator("").unwrap().is_some());
+        assert!(build_propagator("   ").unwrap().is_some());
+    }
+
+    #[test]
+    fn accepts_supported_names_case_and_space_insensitively() {
+        assert!(build_propagator("tracecontext").unwrap().is_some());
+        assert!(build_propagator("baggage").unwrap().is_some());
+        assert!(
+            build_propagator(" TraceContext , Baggage ")
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn none_yields_no_propagator() {
+        assert!(build_propagator("none").unwrap().is_none());
+        // `none` anywhere in the list disables propagation entirely.
+        assert!(build_propagator("tracecontext,none").unwrap().is_none());
+    }
+
+    #[test]
+    fn unsupported_name_is_rejected() {
+        let error = build_propagator("bogus").unwrap_err().to_string();
+        assert!(error.contains("bogus"), "unexpected error: {error}");
+        // A single bad entry fails the whole list.
+        assert!(build_propagator("tracecontext,bogus").is_err());
     }
 }

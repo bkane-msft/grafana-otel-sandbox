@@ -95,7 +95,9 @@ Env config splits across two files, loaded by direnv:
   the matching endpoint to switch transports. The official Rust exporters read
   standard OTLP/resource/metric-interval variables directly. Per-signal exporter
   selection via `OTEL_TRACES_EXPORTER` / `OTEL_METRICS_EXPORTER` /
-  `OTEL_LOGS_EXPORTER` (`otlp` | `console` | `none`) matches the Go example.
+  `OTEL_LOGS_EXPORTER` (`otlp` | `console` | `none`) matches the Go example, as
+  does distributed-context propagation via `OTEL_PROPAGATORS` (`tracecontext`,
+  `baggage`, or `none`; defaults to `tracecontext,baggage`).
 
 # Dashboards
 
