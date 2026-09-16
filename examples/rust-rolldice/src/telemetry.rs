@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{LogExporter, MetricExporter, SpanExporter};
@@ -67,10 +67,20 @@ impl Telemetry {
     }
 
     pub fn shutdown(self) -> Result<()> {
-        self.tracer_provider.shutdown()?;
-        self.meter_provider.shutdown()?;
-        self.logger_provider.shutdown()?;
-        Ok(())
+        let errors = [
+            ("traces", self.tracer_provider.shutdown()),
+            ("metrics", self.meter_provider.shutdown()),
+            ("logs", self.logger_provider.shutdown()),
+        ]
+        .into_iter()
+        .filter_map(|(signal, result)| result.err().map(|error| format!("{signal}: {error}")))
+        .collect::<Vec<_>>();
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(anyhow!("telemetry shutdown failed: {}", errors.join("; ")))
+        }
     }
 }
 
