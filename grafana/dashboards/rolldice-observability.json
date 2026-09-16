@@ -612,7 +612,7 @@
             "uid": "tempo"
           },
           "limit": 20,
-          "query": "{ resource.service.name = \"rolldice\" && status = error }",
+          "query": "{ resource.service.name = \"$service\" && status = error }",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
