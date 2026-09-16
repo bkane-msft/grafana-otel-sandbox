@@ -10,6 +10,7 @@ use axum::{
     body::Body,
     extract::{MatchedPath, Request, State},
     http::{Response, StatusCode},
+    middleware::{self, Next},
     response::IntoResponse,
     routing::get,
 };
@@ -28,6 +29,7 @@ pub struct AppState {
     roller: Arc<Roller>,
     roll_result: Histogram<u64>,
     roll_successes: Counter<u64>,
+    http_request_duration: Histogram<f64>,
 }
 
 impl AppState {
@@ -45,6 +47,17 @@ impl AppState {
                 .with_description("The number of successful dice rolls")
                 .with_unit("{rolls}")
                 .build(),
+            // Standard OTel HTTP server metric. tower-http's TraceLayer only
+            // emits spans, so we record this histogram ourselves to match the
+            // semantic conventions (and the Go example's otelhttp output).
+            http_request_duration: meter
+                .f64_histogram("http.server.request.duration")
+                .with_description("Duration of inbound HTTP requests")
+                .with_unit("s")
+                .with_boundaries(vec![
+                    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1., 2.5, 5., 7.5, 10.,
+                ])
+                .build(),
         }
     }
 }
@@ -52,6 +65,10 @@ impl AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/rolldice", get(rolldice))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            record_http_metrics,
+        ))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request| {
@@ -86,6 +103,40 @@ pub fn router(state: AppState) -> Router {
                 ),
         )
         .with_state(state)
+}
+
+/// Records the `http.server.request.duration` histogram for every request.
+///
+/// Runs after routing, so `MatchedPath` is available for the low-cardinality
+/// `http.route` attribute.
+async fn record_http_metrics(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> axum::response::Response {
+    let method = request.method().clone();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|matched| matched.as_str().to_owned());
+
+    let start = Instant::now();
+    let response = next.run(request).await;
+    let elapsed = start.elapsed().as_secs_f64();
+
+    let mut attributes = vec![
+        KeyValue::new("http.request.method", method.to_string()),
+        KeyValue::new(
+            "http.response.status_code",
+            i64::from(response.status().as_u16()),
+        ),
+    ];
+    if let Some(route) = route {
+        attributes.push(KeyValue::new("http.route", route));
+    }
+    state.http_request_duration.record(elapsed, &attributes);
+
+    response
 }
 
 #[tracing::instrument(
@@ -211,6 +262,8 @@ mod tests {
             histogram.bucket_counts().collect::<Vec<_>>(),
             vec![0, 0, 0, 1, 0, 0, 0]
         );
+
+        assert_http_duration_recorded(&metrics, 200);
     }
 
     #[tokio::test]
@@ -252,6 +305,28 @@ mod tests {
         let metrics = telemetry.metrics();
         assert!(maybe_find_metric(&metrics, "dice.roll.successes").is_none());
         assert!(maybe_find_metric(&metrics, "dice.roll.result").is_none());
+
+        // The HTTP metric is recorded regardless of the handler outcome.
+        assert_http_duration_recorded(&metrics, 500);
+    }
+
+    fn assert_http_duration_recorded(metrics: &[ResourceMetrics], status: i64) {
+        let metric = find_metric(metrics, "http.server.request.duration");
+        let AggregatedMetrics::F64(MetricData::Histogram(histogram)) = metric.data() else {
+            panic!("http.server.request.duration was not an f64 histogram");
+        };
+        let point = histogram.data_points().next().unwrap();
+        assert_eq!(point.count(), 1);
+        assert!(
+            point
+                .attributes()
+                .any(|attribute| attribute == &KeyValue::new("http.response.status_code", status))
+        );
+        assert!(
+            point
+                .attributes()
+                .any(|attribute| attribute == &KeyValue::new("http.route", "/rolldice"))
+        );
     }
 
     fn find_metric<'a>(

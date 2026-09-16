@@ -64,11 +64,11 @@ Three variants of the same OpenTelemetry-instrumented dice roller live under
   `go test ./...` from that directory.
 - **`examples/rust-rolldice`** (`service.name=rust-rolldice`) - an idiomatic
   Axum version. Business dependencies and metric instruments live in
-  `AppState`; `tracing` subscribers provide spans and logs. Its parallel tests
+  `AppState`; `tracing` subscribers provide spans and logs. Because
+  `tower-http` only emits spans, a small Axum middleware records the standard
+  `http.server.request.duration` histogram so the dashboard's HTTP panels
+  (request rate, error ratio, P95 latency) populate too. Its parallel tests
   use per-test in-memory OTel exporters; run `cargo test` from that directory.
-  The dashboard's custom dice metrics, logs, and traces work for this example;
-  its Go HTTP request-rate panels remain empty because `tower-http` does not
-  emit the standard OTel HTTP server metrics.
 
 All three listen on port 8081, so run only one at a time.
 
