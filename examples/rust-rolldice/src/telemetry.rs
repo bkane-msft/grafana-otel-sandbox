@@ -20,21 +20,73 @@ pub struct Telemetry {
     logger_provider: SdkLoggerProvider,
 }
 
+/// Which exporter a signal uses, selected by an `OTEL_<SIGNAL>_EXPORTER` env
+/// var. Matches the subset of Go's autoexport we care about.
+#[derive(Clone, Copy)]
+enum ExporterKind {
+    Otlp,
+    Console,
+    None,
+}
+
+impl ExporterKind {
+    fn from_env(var: &str) -> Result<Self> {
+        match std::env::var(var)
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "" | "otlp" => Ok(Self::Otlp),
+            "console" | "stdout" => Ok(Self::Console),
+            "none" => Ok(Self::None),
+            other => Err(anyhow!(
+                "unsupported {var}={other:?}; expected otlp, console, or none"
+            )),
+        }
+    }
+}
+
 impl Telemetry {
     pub fn init() -> Result<Self> {
         let resource = Resource::builder().build();
-        let tracer_provider = SdkTracerProvider::builder()
-            .with_batch_exporter(SpanExporter::builder().build()?)
-            .with_resource(resource.clone())
-            .build();
-        let meter_provider = SdkMeterProvider::builder()
-            .with_periodic_exporter(MetricExporter::builder().build()?)
-            .with_resource(resource.clone())
-            .build();
-        let logger_provider = SdkLoggerProvider::builder()
-            .with_batch_exporter(LogExporter::builder().build()?)
-            .with_resource(resource)
-            .build();
+
+        // Each signal's destination is chosen by OTEL_<SIGNAL>_EXPORTER,
+        // mirroring the Go example's autoexport. OTLP endpoint/protocol and the
+        // metric interval are read from their standard env vars by the SDK.
+        let mut tracer_provider = SdkTracerProvider::builder().with_resource(resource.clone());
+        tracer_provider = match ExporterKind::from_env("OTEL_TRACES_EXPORTER")? {
+            ExporterKind::Otlp => {
+                tracer_provider.with_batch_exporter(SpanExporter::builder().build()?)
+            }
+            ExporterKind::Console => {
+                tracer_provider.with_simple_exporter(opentelemetry_stdout::SpanExporter::default())
+            }
+            ExporterKind::None => tracer_provider,
+        };
+        let tracer_provider = tracer_provider.build();
+
+        let mut meter_provider = SdkMeterProvider::builder().with_resource(resource.clone());
+        meter_provider = match ExporterKind::from_env("OTEL_METRICS_EXPORTER")? {
+            ExporterKind::Otlp => {
+                meter_provider.with_periodic_exporter(MetricExporter::builder().build()?)
+            }
+            ExporterKind::Console => meter_provider
+                .with_periodic_exporter(opentelemetry_stdout::MetricExporter::default()),
+            ExporterKind::None => meter_provider,
+        };
+        let meter_provider = meter_provider.build();
+
+        let mut logger_provider = SdkLoggerProvider::builder().with_resource(resource);
+        logger_provider = match ExporterKind::from_env("OTEL_LOGS_EXPORTER")? {
+            ExporterKind::Otlp => {
+                logger_provider.with_batch_exporter(LogExporter::builder().build()?)
+            }
+            ExporterKind::Console => {
+                logger_provider.with_simple_exporter(opentelemetry_stdout::LogExporter::default())
+            }
+            ExporterKind::None => logger_provider,
+        };
+        let logger_provider = logger_provider.build();
 
         let filter = std::env::var("RUST_LOG")
             .or_else(|_| std::env::var("LOG_LEVEL"))

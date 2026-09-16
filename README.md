@@ -34,7 +34,7 @@ direnv allow examples/rust-rolldice
 # Or run the Rust app instead
 (cd examples/rust-rolldice && direnv exec . ./run.sh)
 
-# Go-only alternative: emit everything to stdout
+# Emit everything to stdout instead of OTLP (works for either app)
 (cd examples/go-rolldice-with-tests && \
   direnv exec . env OTEL_TRACES_EXPORTER=console OTEL_METRICS_EXPORTER=console \
   OTEL_LOGS_EXPORTER=console ./run.sh)
@@ -93,8 +93,9 @@ Env config splits across two files, loaded by direnv:
 - **`examples/rust-rolldice/.envrc`** - Rust app defaults. Both OTLP
   HTTP/protobuf and gRPC are compiled in; set `OTEL_EXPORTER_OTLP_PROTOCOL` and
   the matching endpoint to switch transports. The official Rust exporters read
-  standard OTLP/resource/metric-interval variables directly. This example does
-  not yet implement `OTEL_*_EXPORTER=console/none` selection.
+  standard OTLP/resource/metric-interval variables directly. Per-signal exporter
+  selection via `OTEL_TRACES_EXPORTER` / `OTEL_METRICS_EXPORTER` /
+  `OTEL_LOGS_EXPORTER` (`otlp` | `console` | `none`) matches the Go example.
 
 # Dashboards
 

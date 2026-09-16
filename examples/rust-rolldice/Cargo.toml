@@ -9,6 +9,7 @@ axum = "0.8.9"
 opentelemetry = { version = "0.32.0", default-features = false, features = ["trace", "metrics", "logs"] }
 opentelemetry-appender-tracing = "0.32.0"
 opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "metrics", "logs", "internal-logs", "http-proto", "reqwest-blocking-client", "grpc-tonic"] }
+opentelemetry-stdout = { version = "0.32.0", features = ["trace", "metrics", "logs"] }
 opentelemetry_sdk = { version = "0.32.1", default-features = false, features = ["trace", "metrics", "logs", "internal-logs"] }
 rand = "0.10.2"
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
