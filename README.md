@@ -11,8 +11,8 @@ brew install direnv uv docker
 
 # one-time, after each .envrc change
 direnv allow
-direnv allow examples/go-global-state
-direnv allow examples/go-with-tests
+direnv allow examples/go-rolldice-global-state
+direnv allow examples/go-rolldice-with-tests
 
 # Set up .env needed for MCP server
 ./run-lgtm.py                       # start Grafana
@@ -27,7 +27,7 @@ direnv allow examples/go-with-tests
 ./run-lgtm.py
 
 # Terminal 2: run the Go app
-cd examples/go-with-tests && ./run.sh
+cd examples/go-rolldice-with-tests && ./run.sh
 
 # Alternative, emit everything to stdout
 OTEL_TRACES_EXPORTER=console OTEL_METRICS_EXPORTER=console OTEL_LOGS_EXPORTER=console ./run.sh
@@ -48,9 +48,9 @@ The rolldice dashboard has a **Service** dropdown to switch between the
 Two variants of the same OpenTelemetry-instrumented dice roller live under
 `examples/`:
 
-- **`examples/go-global-state`** (`service.name=go-rolldice-global-state`) - the
+- **`examples/go-rolldice-global-state`** (`service.name=go-rolldice-global-state`) - the
   original, wired up with global OTel providers and package-level state.
-- **`examples/go-with-tests`** (`service.name=go-rolldice-with-tests`) - refactored
+- **`examples/go-rolldice-with-tests`** (`service.name=go-rolldice-with-tests`) - refactored
   so request-time state (roller, logger, tracer, metric instruments) lives on a
   `RollDiceServer` struct built from explicit providers. This makes the handler
   unit-testable without touching global state; see `rolldice_test.go` and run
@@ -75,7 +75,7 @@ Env config splits across two files, loaded by direnv:
 
 - **`.envrc`** (committed): unchanging defaults
 - **`.env`** (gitignored - generate with `./create-grafana-token.py`): `GRAFANA_SERVICE_ACCOUNT_TOKEN`. Loaded by `.envrc`
-- **`examples/go-global-state/.envrc`** / **`examples/go-with-tests/.envrc`** - env vars needed by each Go example app
+- **`examples/go-rolldice-global-state/.envrc`** / **`examples/go-rolldice-with-tests/.envrc`** - env vars needed by each Go example app
 
 # Dashboards
 
