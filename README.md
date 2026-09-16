@@ -11,7 +11,8 @@ brew install direnv uv docker
 
 # one-time, after each .envrc change
 direnv allow
-direnv allow examples/go
+direnv allow examples/go-global-state
+direnv allow examples/go-with-tests
 
 # Set up .env needed for MCP server
 ./run-lgtm.py                       # start Grafana
@@ -26,7 +27,7 @@ direnv allow examples/go
 ./run-lgtm.py
 
 # Terminal 2: run the Go app
-cd examples/go && ./run.sh
+cd examples/go-with-tests && ./run.sh
 
 # Alternative, emit everything to stdout
 OTEL_TRACES_EXPORTER=console OTEL_METRICS_EXPORTER=console OTEL_LOGS_EXPORTER=console ./run.sh
@@ -39,6 +40,23 @@ docker kill lgtm
 ```
 
 Then open Grafana at http://localhost:3000 to see traces, metrics, and logs.
+The rolldice dashboard has a **Service** dropdown to switch between the
+`rolldice-with-tests` and `rolldice-global-state` example apps.
+
+# Examples
+
+Two variants of the same OpenTelemetry-instrumented dice roller live under
+`examples/`:
+
+- **`examples/go-global-state`** (`service.name=rolldice-global-state`) - the
+  original, wired up with global OTel providers and package-level state.
+- **`examples/go-with-tests`** (`service.name=rolldice-with-tests`) - refactored
+  so request-time state (roller, logger, tracer, metric instruments) lives on a
+  `RollDiceServer` struct built from explicit providers. This makes the handler
+  unit-testable without touching global state; see `rolldice_test.go` and run
+  `go test ./...` from that directory.
+
+Both listen on port 8081, so run only one at a time.
 
 # Ports
 
@@ -57,7 +75,7 @@ Env config splits across two files, loaded by direnv:
 
 - **`.envrc`** (committed): unchanging defaults
 - **`.env`** (gitignored - generate with `./create-grafana-token.py`): `GRAFANA_SERVICE_ACCOUNT_TOKEN`. Loaded by `.envrc`
-- **`examples/go/.envrc`** - env vars needed by the Go example app
+- **`examples/go-global-state/.envrc`** / **`examples/go-with-tests/.envrc`** - env vars needed by each Go example app
 
 # Dashboards
 
