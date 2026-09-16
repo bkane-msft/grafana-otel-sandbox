@@ -29,14 +29,15 @@ direnv allow examples/rust-rolldice
 ./run-lgtm.py
 
 # Terminal 2: run the Go app
-(cd examples/go-rolldice-with-tests && ./run.sh)
+(cd examples/go-rolldice-with-tests && direnv exec . ./run.sh)
 
 # Or run the Rust app instead
-(cd examples/rust-rolldice && ./run.sh)
+(cd examples/rust-rolldice && direnv exec . ./run.sh)
 
 # Go-only alternative: emit everything to stdout
 (cd examples/go-rolldice-with-tests && \
-  OTEL_TRACES_EXPORTER=console OTEL_METRICS_EXPORTER=console OTEL_LOGS_EXPORTER=console ./run.sh)
+  direnv exec . env OTEL_TRACES_EXPORTER=console OTEL_METRICS_EXPORTER=console \
+  OTEL_LOGS_EXPORTER=console ./run.sh)
 
 # Terminal 3: hit it
 while true; do curl localhost:8081/rolldice; done

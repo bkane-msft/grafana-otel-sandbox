@@ -54,7 +54,8 @@ impl Telemetry {
             .with(tracing_subscriber::fmt::layer())
             .with(
                 tracing_opentelemetry::layer()
-                    .with_tracer(tracer_provider.tracer(INSTRUMENTATION_SCOPE)),
+                    .with_tracer(tracer_provider.tracer(INSTRUMENTATION_SCOPE))
+                    .with_filter(exporter_filter.clone()),
             )
             .with(OpenTelemetryTracingBridge::new(&logger_provider).with_filter(exporter_filter));
         subscriber.try_init()?;
