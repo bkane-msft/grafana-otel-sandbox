@@ -654,7 +654,7 @@
         "type": "custom",
         "label": "Service",
         "description": "OTel service.name to filter by",
-        "query": "go-rolldice-with-tests,go-rolldice-global-state",
+        "query": "go-rolldice-with-tests,go-rolldice-global-state,rust-rolldice",
         "current": {
           "text": "go-rolldice-with-tests",
           "value": "go-rolldice-with-tests",
@@ -669,6 +669,11 @@
           {
             "text": "go-rolldice-global-state",
             "value": "go-rolldice-global-state",
+            "selected": false
+          },
+          {
+            "text": "rust-rolldice",
+            "value": "rust-rolldice",
             "selected": false
           }
         ],

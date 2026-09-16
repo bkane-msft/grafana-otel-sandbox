@@ -1,0 +1,23 @@
+[package]
+name = "rust-rolldice"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+axum = "0.8.9"
+opentelemetry = { version = "0.32.0", default-features = false, features = ["trace", "metrics", "logs"] }
+opentelemetry-appender-tracing = "0.32.0"
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "metrics", "logs", "internal-logs", "http-proto", "reqwest-blocking-client", "grpc-tonic"] }
+opentelemetry_sdk = { version = "0.32.1", default-features = false, features = ["trace", "metrics", "logs", "internal-logs"] }
+rand = "0.10.2"
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
+tower-http = { version = "0.7.1", features = ["trace"] }
+tracing = "0.1.44"
+tracing-opentelemetry = { version = "0.33.0", default-features = false }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[dev-dependencies]
+http-body-util = "0.1.5"
+opentelemetry_sdk = { version = "0.32.1", features = ["testing"] }
+tower = { version = "0.5.3", features = ["util"] }
