@@ -654,21 +654,21 @@
         "type": "custom",
         "label": "Service",
         "description": "OTel service.name to filter by",
-        "query": "rolldice-with-tests,rolldice-global-state",
+        "query": "go-rolldice-with-tests,go-rolldice-global-state",
         "current": {
-          "text": "rolldice-with-tests",
-          "value": "rolldice-with-tests",
+          "text": "go-rolldice-with-tests",
+          "value": "go-rolldice-with-tests",
           "selected": true
         },
         "options": [
           {
-            "text": "rolldice-with-tests",
-            "value": "rolldice-with-tests",
+            "text": "go-rolldice-with-tests",
+            "value": "go-rolldice-with-tests",
             "selected": true
           },
           {
-            "text": "rolldice-global-state",
-            "value": "rolldice-global-state",
+            "text": "go-rolldice-global-state",
+            "value": "go-rolldice-global-state",
             "selected": false
           }
         ],

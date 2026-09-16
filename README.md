@@ -41,16 +41,16 @@ docker kill lgtm
 
 Then open Grafana at http://localhost:3000 to see traces, metrics, and logs.
 The rolldice dashboard has a **Service** dropdown to switch between the
-`rolldice-with-tests` and `rolldice-global-state` example apps.
+`go-rolldice-with-tests` and `go-rolldice-global-state` example apps.
 
 # Examples
 
 Two variants of the same OpenTelemetry-instrumented dice roller live under
 `examples/`:
 
-- **`examples/go-global-state`** (`service.name=rolldice-global-state`) - the
+- **`examples/go-global-state`** (`service.name=go-rolldice-global-state`) - the
   original, wired up with global OTel providers and package-level state.
-- **`examples/go-with-tests`** (`service.name=rolldice-with-tests`) - refactored
+- **`examples/go-with-tests`** (`service.name=go-rolldice-with-tests`) - refactored
   so request-time state (roller, logger, tracer, metric instruments) lives on a
   `RollDiceServer` struct built from explicit providers. This makes the handler
   unit-testable without touching global state; see `rolldice_test.go` and run
